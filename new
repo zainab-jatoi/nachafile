@@ -1,1 +1,87 @@
+const fs = require('fs');
+const axios = require('axios');
+const nachofile = require('');
+// AffiliateWP API details (replace with your own)
+const apiKey = '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';
+const apiUrl = 'https://dev2.aplatform.site/wp/wp-json/awp-sp/v1/affiliate/stripe/connect-oauth-response';
+
+// Function to fetch unpaid referrals
+async function getUnpaidReferrals() {
+  try {
+    const response = await axios.get(apiUrl, {
+      params: {
+        status: 'unpaid',
+        api_key: apiKey,
+      },
+    });
+
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching unpaid referrals:', error.message);
+    throw error; // Re-throw the error to allow further handling
+  }
+}
+
+// Function to map data and create NACHA file
+async function createNACHAFile(referrals) {
+  const batch = new nachofile.Batch(); // Create a new NACHA batch
+
+  for (const referral of referrals) {
+    try {
+      // Import nachofile within the function
+      const nachofile = require('nachofile');
+
+      // Function to map referral data to NACHA fields
+      function mapReferralToNACHA(referral) {
+        return new nachofile.Entry({
+          routingNumber: 'YOUR_ROUTING_NUMBER',
+          accountNumber: 'YOUR_ACCOUNT_NUMBER',
+          amount: referral.amount,
+          transactionCode: nachofile.TransactionCode.Credit,
+          // Assuming the following fields are available in the referral object:
+          name: referral.name,
+          email: referral.email,
+          affiliate_id: referral.affiliate_id,
+          payment_email: referral.payment_email,
+          username: referral.username,
+          amount: referral.amount, // Ensure correct property name is used
+          currency: referral.currency,
+          description: referral.description,
+          campaign: referral.campaign,
+          reference: referral.reference,
+          context: referral.context,
+          status: referral.status,
+          flag: referral.flag,
+          type: referral.type,
+          date: referral.date,
+          // Additional fields (map as needed based on your data structure and NACHA requirements)
+        });
+      }
+
+      const entry = mapReferralToNACHA(referral);
+      batch.addEntry(entry);
+    } catch (error) {
+      console.error(`Error processing referral with id ${referral.id}:`, error.message);
+      // Handle individual referral processing errors (e.g., log, skip to next referral)
+    }
+  }
+
+  const nachoFile = batch.build(); // Generate the NACHA file content
+
+  const fileName = 'unpaid_referrals.ach';
+  fs.writeFileSync(fileName, nachoFile);
+  console.log(`NACHA file "${fileName}" created successfully.`);
+}
+
+// Run the script
+async function main() {
+  try {
+    const unpaidReferrals = await getUnpaidReferrals();
+    await createNACHAFile(unpaidReferrals);
+  } catch (error) {
+    console.error('An error occurred:', error.message);
+  }
+}
+
+main();
 
